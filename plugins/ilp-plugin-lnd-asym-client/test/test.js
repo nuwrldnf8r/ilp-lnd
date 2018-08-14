@@ -1,6 +1,7 @@
 var IlpPacket = require('ilp-packet');
 var PluginClient = require('../index');
 var config = require('./conf.js');
+const debug = require('debug')('test');
 
 var secret = 'helloworld1';
 var port = 5000;
@@ -12,13 +13,13 @@ var plugin_client = new PluginClient(
 });
 
 plugin_client.registerDataHandler(((data)=>{
-	console.log(data);
+	debug(data);
 	return null;
 }));
 
 async function go() {
 	try{	
-		console.log('connecting');
+		debug('connecting');
 		await plugin_client.connect().then((res)=>{}).catch((e)=>console.log(e));
 		
 		setTimeout(async ()=>{

@@ -32,6 +32,7 @@ function getContainers(){
 }
 
 function copyLocal(filename){
+	
 	let f = filename.replace('plugins/','environment/docker/plugins_built/');
 	fs.createReadStream(filename).pipe(fs.createWriteStream(f));
 }
@@ -39,8 +40,7 @@ function copyLocal(filename){
 function copy(container, filename){
 	
 	return new Promise((resolve,reject)=>{
-
-		let _filename = filename.replace(toWatch,'ilp_plugins/');
+		let _filename = filename.replace('plugins/','ilp_plugins/');
 		console.log(`docker cp ${filename} ${container}:${_filename}`);
 		let docker = spawn('docker', ['cp', `${filename}`, `${container}:${_filename}`]);
 		docker.stdout.on('data',(data)=>{

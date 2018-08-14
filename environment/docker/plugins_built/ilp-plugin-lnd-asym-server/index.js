@@ -8,6 +8,7 @@ const accounts = new Store();
 const LndLib = require('./src/lndlib');
 const crypto = require('crypto');
 const {  util, ChannelWatcher } = require('ilp-plugin-xrp-paychan-shared');
+const debug = require('debug')('server');
 
 const GET_INVOICE = 'get_invoice';
 const PAYMENT_PREIMAGE = 'payment_preimage';
@@ -38,30 +39,30 @@ class Plugin extends PluginMiniAccounts {
 		this._protocolCallFunctions['get_lightning_info'] = this._getLightningInfo.bind(this);
 		this._protocolCallFunctions[GET_INVOICE] = this._getInvoice.bind(this);
 			
-		console.log('setting up lightning');
+		debug('setting up lightning');
 		this._lightning = new LndLib.lightning(opts._lndCertPath,opts._lndHost,opts._lndProtoPath,opts._lndMacaroonPath);
 		this._lightning.initialize().then(()=>{
-			console.log('lightning initialized');
+			debug('lightning initialized');
 		});
 		this._invoices = new Map();
 	}
 
 	async _connect (address, { requestId, data }) {
-		console.log('server connected');
+		debug('server connected');
 		try{
 			//connect to lightning
 			//getinfo
 			if(!this._lightningAddress){
-				console.log('getting lightning info');
+				debug('getting lightning info');
 				let lightningInfo = await this._lightning.getInfo();
-				console.log('got lightning info');
+				debug('got lightning info');
 				this._lightningAddress = `${lightningInfo.identity_pubkey}@${this._host}`;
 			}
 
 			return null;
 		}
 		catch(e){
-			console.log(e);
+			debug(e);
 			throw e;
 		}
 	}
@@ -79,11 +80,11 @@ class Plugin extends PluginMiniAccounts {
 
 	async _connectToPeer (account){
 		let ret = await this._lightning.listPeers();
-		console.log(ret.peers);
+		debug(ret.peers);
 		if(ret.peers.length===0){
-			console.log('no peers exist - connecting to peer');
+			debug('no peers exist - connecting to peer');
 			await this._lightning.connect({addr: account.lightningAddress});
-			console.log('connected to peer');
+			debug('connected to peer');
 		}
 		return;
 	}
@@ -92,7 +93,7 @@ class Plugin extends PluginMiniAccounts {
 		if(account.channelId){
 			try{
 				let info = await this._lightning.getChanInfo({chan_id: account.channelId});
-				console.log(info);
+				debug(info);
 				return info;
 			}
 			catch(e){
@@ -123,10 +124,10 @@ class Plugin extends PluginMiniAccounts {
 	}
 
 	async _getChannel (pub_key) {
-		console.log('---------------------------');
+		debug('---------------------------');
 		let channels = await this._lightning.listChannels();
-		console.log('pub key: ' + pub_key);
-		console.log(channels);
+		debug('pub key: ' + pub_key);
+		debug(channels);
 		
 		let filter = channels.channels.filter(c=>(c.remote_pubkey===pub_key && c.local_balance>0));
 		if(filter.length===0){
@@ -140,11 +141,11 @@ class Plugin extends PluginMiniAccounts {
 	/*
 	async _sendMessage (account, data){
 		try{
-			console.log('sending message ');
+			debug('sending message ');
 			
 			let requestId = await util._requestId();
-			console.log('requestid: ' + requestId);
-			console.log(data);
+			debug('requestid: ' + requestId);
+			debug(data);
 			
 			let infoResponse = await this._call(account.ilpAddress, {
 				type: BtpPacket.TYPE_MESSAGE,
@@ -161,14 +162,14 @@ class Plugin extends PluginMiniAccounts {
 	*/
 
 	async _setupChannel (account) {
-		console.log('setting up channel');
+		debug('setting up channel');
 		await this._connectToPeer (account);
 		if(!this._setupLnChannel) return null;
 		
-		console.log(`setting up channel for ${account.lightningAddress} - server`);
+		debug(`setting up channel for ${account.lightningAddress} - server`);
 		let existingChannel = await this._getExistingChannel(account);
 		if(existingChannel){
-			console.log('channel already exists');
+			debug('channel already exists');
 
 			account.channelId = existingChannel.chan_id;
 			await accounts.put(account.name,account);
@@ -177,7 +178,7 @@ class Plugin extends PluginMiniAccounts {
 		
 		try{
 			let walletBalance = await this._lightning.walletBalance();
-			console.log(walletBalance);
+			debug(walletBalance);
 			let confirmed = parseInt(walletBalance.confirmed_balance);
 			if(confirmed<this._channelLocalFunding){
 				throw new Error('Insufficient wallet balance to open channel');
@@ -192,34 +193,34 @@ class Plugin extends PluginMiniAccounts {
 				async (err, status) => {
 					try{
 						if(status && status.chan_pending){
-							console.log(status);
+							debug(status);
 						}
 						else if (status && status.chan_open){
-							console.log(status);
+							debug(status);
 						}
 						else if(err){
 							throw err;
 						}
 					}
 					catch(e){
-						console.log(e);
+						debug(e);
 						//throw e;
 					}
 				});
 	
-			console.log('channel open');
-			console.log(channel);
+			debug('channel open');
+			debug(channel);
 			account.channelId = await this._getChannelId (account.lightningPubKey);
-			console.log('channel ID:' + account.channelId);
+			debug('channel ID:' + account.channelId);
 			
 			await accounts.put(account.name,account);
-			console.log(`Channel created. chan_id: ${account.channelId}`);
+			debug(`Channel created. chan_id: ${account.channelId}`);
 			
 			return null;
 			
 		}
 		catch(e){
-			console.log(e);
+			debug(e);
 			return null;
 			//throw e;
 		}
@@ -228,8 +229,8 @@ class Plugin extends PluginMiniAccounts {
 	/******** manage incoming messages  *****************/
 
 	async _processChannelInfo (account,requestId,data) {
-		console.log('server - called process channel info');
-		console.log(data);
+		debug('server - called process channel info');
+		debug(data);
 		this._setupChannel(account);
 		let packet = protocolDataParser.composeJSONPacket('info',{type: 'channel_info'});
 		return packet;
@@ -237,7 +238,7 @@ class Plugin extends PluginMiniAccounts {
 	}
 
 	async _getLightningInfo (account,requestId,data) {
-		console.log('server - called send lightning info');
+		debug('server - called send lightning info');
 		try{
 			if(data.address){
 				account.lightningAddress = data.address;
@@ -249,13 +250,13 @@ class Plugin extends PluginMiniAccounts {
 			
 		}
 		catch(e){
-			console.log(e);
+			debug(e);
 			throw e;
 		}
 	}
 
 	async _getInvoice (account, requestId, amount) {
-		console.log('get invoice');
+		debug('get invoice');
 		let invoice = await this._lightning.addInvoice({amt: amount});
 		this._invoices.set(invoice.r_hash, amount);
 		return [{
@@ -276,11 +277,11 @@ class Plugin extends PluginMiniAccounts {
 	
 
 	async _handleData (address, { requestId, data }) {
-		console.log('got data server');
+		debug('got data server');
 		let account = await this._getAccount(address);
 		let { ilp, protocolMap } = this.protocolDataToIlpAndCustom(data);
 		
-		console.log(protocolMap);
+		debug(protocolMap);
 		
 
 		if (protocolMap.ilp && ilp[0] === IlpPacket.Type.TYPE_ILP_PREPARE) {
@@ -296,7 +297,7 @@ class Plugin extends PluginMiniAccounts {
 			*/
 		}
 		else if(protocolMap.info && protocolMap.info.type && this._protocolCallFunctions[protocolMap.info.type]){
-			console.log('here');
+			debug('here');
 			var ret = await this._protocolCallFunctions[protocolMap.info.type](account,requestId,protocolMap.info);
 			return [ret];
 		}

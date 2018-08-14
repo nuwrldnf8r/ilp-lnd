@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const {  util, ChannelWatcher } = require('ilp-plugin-xrp-paychan-shared');
 const { InvalidFieldsError, NotAcceptedError } = require('./src/errors');
 const LndLib = require('./src/lndlib');
+const debug = require('debug')('client');
 
 const GET_INVOICE = 'get_invoice';
 const PAYMENT_PREIMAGE = 'payment_preimage';
@@ -23,14 +24,14 @@ class Plugin extends BtpPlugin {
 		this._protocolCallFunctions['channel_info'] = this._processChannelInfo.bind(this);
 		this._protocolCallFunctions[GET_INVOICE] = this._getInvoice.bind(this);
 
-		console.log('setting up lightning');
+		debug('setting up lightning');
 		this._lightning = new LndLib.lightning(opts._lndCertPath,opts._lndHost,opts._lndProtoPath,opts._lndMacaroonPath);
 		this._invoices = new Map();
 	}
 
 	async _connect () {
 		await this._lightning.initialize();
-		console.log('client connected');
+		debug('client connected');
 
 		//connect to lightning
 		//getInfo
@@ -39,7 +40,7 @@ class Plugin extends BtpPlugin {
 		let host = this._host;
 		let pubkey = '_client'; //get from info from getinfo call
 		var packet = await this._lightningInfoHandshake (host, pubkey);
-		console.log(packet);
+		debug(packet);
 		this._handleData(null,{requestId: packet.requestId, data: packet.data});
 		
 		return null;
@@ -72,17 +73,17 @@ class Plugin extends BtpPlugin {
 	/**********************Channels**********************/
 
 	async _getChannelId (pub_key) {
-		console.log('pub_key: ' + pub_key);
+		debug('pub_key: ' + pub_key);
 		let channel = await this._getChannel(pub_key);
 		if(!channel) return null;
 		return channel.chan_id;
 	}
 
 	async _getChannel (pub_key) {
-		console.log('---------------------------');
+		debug('---------------------------');
 		let channels = await this._lightning.listChannels();
-		console.log('pub key: ' + pub_key);
-		console.log(channels);
+		debug('pub key: ' + pub_key);
+		debug(channels);
 		let filter = channels.channels.filter(c=>(c.remote_pubkey===pub_key && c.local_balance>0));
 		if(filter.length===0){
 			return null;
@@ -93,11 +94,11 @@ class Plugin extends BtpPlugin {
 	}
 
 	async _getExistingChannel () {
-		console.log('checking for existing channels');
+		debug('checking for existing channels');
 		if(this._channelId){
 			try{
 				let info = await this._lightning.getChanInfo({chan_id: this._channelId});
-				console.log(info);
+				debug(info);
 				return info;
 			}
 			catch(e){
@@ -128,10 +129,10 @@ class Plugin extends BtpPlugin {
 		if(!this._setupLnChannel) return null;
 		if(this._settingUpChannel) return null;
 		this._settingUpChannel = true;
-		console.log(`setting up channel with ${this._serverLightningAddress} - client`);
+		debug(`setting up channel with ${this._serverLightningAddress} - client`);
 		let existingChannel = await this._getExistingChannel();
 		if(existingChannel){
-			console.log('channel already exists');
+			debug('channel already exists');
 			this._channelId = existingChannel.chan_id;
 			let requestId = await util._requestId();
 			await this._call(null, {
@@ -143,7 +144,7 @@ class Plugin extends BtpPlugin {
 		}
 		try{
 			let walletBalance = await this._lightning.walletBalance();
-			console.log(walletBalance);
+			debug(walletBalance);
 			let confirmed = parseInt(walletBalance.confirmed_balance);
 			if(confirmed<this._channelLocalFunding){
 				throw new Error('Insufficient wallet balance to open channel');
@@ -157,24 +158,24 @@ class Plugin extends BtpPlugin {
 				async (err, status) => {
 					try{
 						if(status && status.chan_pending){
-							console.log(status);
+							debug(status);
 						}
 						else if (status && status.chan_open){
-							console.log(status);
+							debug(status);
 						}
 						else if(err){
 							throw err;
 						}
 					}
 					catch(e){
-						console.log(e);
+						debug(e);
 						//throw e;
 					}
 				}
 			);
 
-			console.log('channel open');
-			console.log(channel);
+			debug('channel open');
+			debug(channel);
 		
 			this._channelId = await this._getChannelId (this._serverLightningPubKey);
 
@@ -184,14 +185,14 @@ class Plugin extends BtpPlugin {
 				requestId: requestId,
 				data: this._jsonPacket('info',{type: 'channel_info', channelId: this._channelId})
 			});
-			console.log(`Channel created. chan_id: ${this._channelId}`);
+			debug(`Channel created. chan_id: ${this._channelId}`);
 			this._settingUpChannel = false;
 			
 			return null;
 			
 		}
 		catch(e){
-			console.log(e);
+			debug(e);
 			return null;
 			//throw e;
 		}
@@ -203,7 +204,7 @@ class Plugin extends BtpPlugin {
 	/********************Process Data**********************/
 
 	async _processChannelInfo (requestId,data) {
-		console.log('client - called process channel info');
+		debug('client - called process channel info');
 		if(!this._settingUpChannel){
 			this._setupChannel();
 		}
@@ -211,30 +212,30 @@ class Plugin extends BtpPlugin {
 	}
 
 	async _processLightningInfo (requestId,data) {
-		console.log('client - called process lightning info');
+		debug('client - called process lightning info');
 		if(data.address){
 			this._serverLightningAddress = data.address;
 			this._serverLightningPubKey = data.address.split('@')[0];
 		}
 		//if not connected to any peers - connect to this peer
 		let ret = await this._lightning.listPeers();
-		console.log(ret.peers);
+		debug(ret.peers);
 		if(ret.peers.length===0){
-			console.log('no peers exist - connecting to peer');
+			debug('no peers exist - connecting to peer');
 			await this._lightning.connect({addr: this._serverLightningAddress});
-			console.log('connected to peer');
+			debug('connected to peer');
 		}
 		if(!this._settingUpChannel){
 			this._setupChannel();
 		}
-		//console.log('now waiting on channel info...');
+		//debug('now waiting on channel info...');
 
 		return null;
 
 	}
 
 	async _getInvoice (requestId, data) {
-		console.log('get invoice');
+		debug('get invoice');
 		
 		let amount = data;
 		let invoice = await this._lightning.addInvoice({amt: amount});
@@ -299,7 +300,7 @@ class Plugin extends BtpPlugin {
 		catch(e){
 			throw e;
 		}
-		console.log(paymentRequest);
+		debug(paymentRequest);
 		
 		try{
 			let paymentPreimage = await this._payLightningInvoice(paymentRequest, amount);
@@ -348,7 +349,7 @@ class Plugin extends BtpPlugin {
 	async _payLightningInvoice (paymentRequest, amountToPay){
 		try{
 			let decodedReq = await this._lightning.decodePayReq({pay_req: paymentRequest});
-			console.log(decodedReq);
+			debug(decodedReq);
 			
 			const amountDiff = decodedReq.num_satoshis - amountToPay;
 			if (amountDiff > amountDiff * 0.5) {
