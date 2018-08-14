@@ -10,11 +10,11 @@ var plugin_server = new PluginServer(
 {
   	minimumChannelAmount: '10000',
   	port: port,
-  	_host: config.server,
+  	externalIP: config.server,
   	debugHostIldcpInfo: {
     	clientAddress: 'test.example',
   	},
-  	//_setupLnChannel: false
+  	//setupLnChannel: false
 });
 
 
@@ -26,7 +26,7 @@ plugin_server.registerDataHandler(((data)=>{
 async function go() {
 	try{	
 		debug('connecting to server');
-		await plugin_server.connect().then((res)=>{}).catch((e)=>console.log(e));
+		await plugin_server.connect().then((res)=>{}).catch((e)=>debug(e));
 		
 	}
 	catch(e){

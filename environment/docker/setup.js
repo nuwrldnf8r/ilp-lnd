@@ -121,8 +121,16 @@ function sendCoinsFromServer(toAddress){
     });
 }
 
-function createTmpConfig(data){
-    let fileData = `module.exports = ${JSON.stringify(data,null,2)}`;
+function createTmpConfig(data,container){
+    let _data = Object.assign({},data);
+    if(container==='client1'){
+        _data.client = _data.client1;
+    }
+    else if(container==='client2'){
+        _data.client = _data.client2;
+    }
+
+    let fileData = `module.exports = ${JSON.stringify(_data,null,2)}`;
     return new Promise((resolve,reject)=>{
         fs.writeFile('testconf.js',fileData,(err,ret)=>{
             console.log(err);
@@ -177,11 +185,13 @@ async function go(){
         sendCoinsFromServer(client1Address);
         sendCoinsFromServer(client2Address);
         await mine(3);
-        await createTmpConfig(ips);
-        copyConfig('server');
-        copyConfig('client1');
-        copyConfig('client2');
-
+        await createTmpConfig(ips,'server');
+        await copyConfig('server');
+        await createTmpConfig(ips,'client1');
+        await copyConfig('client1');
+        await createTmpConfig(ips,'client2');
+        await copyConfig('client2');
+        await rmTmpConfig();
     }
     catch(e){
         console.log(e)

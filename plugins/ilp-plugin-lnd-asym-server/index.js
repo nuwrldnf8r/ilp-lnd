@@ -18,11 +18,12 @@ let sha256 = (data) => crypto.createHash('sha256').update(data).digest().toStrin
 class Plugin extends PluginMiniAccounts {
 	
 	constructor (opts){
+		console.log(opts);
 		if (!opts.maxInFlight && !opts.maxUnsecured) {
 			//    throw new InvalidFieldsError('missing opts.maxInFlight');
 		}
-		else if(!opts._host){
-			throw new InvalidFieldsError('missing opts.host');
+		else if(!opts.externalIP){
+			throw new InvalidFieldsError('missing opts.externalIP');
 		}
 
 		super(opts);
@@ -30,7 +31,7 @@ class Plugin extends PluginMiniAccounts {
 		this.maxBalance = opts.maxBalance || 10000000; 
 		this.maxUnsecured = opts.maxUnsecured || opts.maxInFlight;
 		this.authToken = opts.authToken;
-		this._host = opts._host;
+		this._externalIP = opts.externalIP;
 
 		this._setupLnChannel = opts._setupLnChannel || true; //default to setting up a channel
 		this._channelLocalFunding = opts._channelLocalFunding || 1000000;
@@ -56,7 +57,7 @@ class Plugin extends PluginMiniAccounts {
 				debug('getting lightning info');
 				let lightningInfo = await this._lightning.getInfo();
 				debug('got lightning info');
-				this._lightningAddress = `${lightningInfo.identity_pubkey}@${this._host}`;
+				this._lightningAddress = `${lightningInfo.identity_pubkey}@${this._externalIP}`;
 			}
 
 			return null;

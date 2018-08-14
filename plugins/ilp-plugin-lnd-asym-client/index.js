@@ -13,12 +13,12 @@ class Plugin extends BtpPlugin {
 	
 	constructor (opts) {
 		super(opts);
-		if(!opts._host){
-			throw new InvalidFieldsError('missing opts._host');
+		if(!opts.externalIP){
+			throw new InvalidFieldsError('missing opts.externalIP');
 		}	
-		this._host = opts._host;
-		this._setupLnChannel = opts._setupLnChannel || true;
-		this._channelLocalFunding = opts._channelLocalFunding || 100000;
+		this._externalIP = opts._externalIP;
+		this._setupLnChannel = opts.setupLnChannel || true;
+		this._channelLocalFunding = opts.channelLocalFunding || 100000;
 		this._protocolCallFunctions = {};
 		this._protocolCallFunctions['lightning_info'] = this._processLightningInfo.bind(this);
 		this._protocolCallFunctions['channel_info'] = this._processChannelInfo.bind(this);
@@ -37,10 +37,9 @@ class Plugin extends BtpPlugin {
 		//getInfo
 		//set this._lightningAddress from this.host and identity_pubkey
 		
-		let host = this._host;
+		let externalIP = this._externalIP;
 		let pubkey = '_client'; //get from info from getinfo call
-		var packet = await this._lightningInfoHandshake (host, pubkey);
-		debug(packet);
+		var packet = await this._lightningInfoHandshake (externalIP, pubkey);
 		this._handleData(null,{requestId: packet.requestId, data: packet.data});
 		
 		return null;
@@ -49,7 +48,7 @@ class Plugin extends BtpPlugin {
 	async _lightningInfoHandshake (){
 		let requestId = await util._requestId();
 		let lightningInfo = await this._lightning.getInfo();
-		this._lightningAddress = `${lightningInfo.identity_pubkey}@${this._host}`;
+		this._lightningAddress = `${lightningInfo.identity_pubkey}@${this.externalIP}`;
 		this._lightningPubKey = lightningInfo.identity_pubkey;
 		
 		let infoResponse = await this._call(null, {

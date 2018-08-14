@@ -9,7 +9,7 @@ var port = 5000;
 var plugin_client = new PluginClient(
 {
 	server: `btp+ws://:${secret}@${config.server}:${port}`,
-	_host: config.client 
+	externalIP: config.client 
 });
 
 plugin_client.registerDataHandler(((data)=>{
@@ -20,7 +20,7 @@ plugin_client.registerDataHandler(((data)=>{
 async function go() {
 	try{	
 		debug('connecting');
-		await plugin_client.connect().then((res)=>{}).catch((e)=>console.log(e));
+		await plugin_client.connect().then((res)=>{}).catch((e)=>debug(e));
 		
 		setTimeout(async ()=>{
 			plugin_client.sendMoney(5000);
