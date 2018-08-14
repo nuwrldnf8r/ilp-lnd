@@ -8,9 +8,9 @@
 ### Running the plugins in the containers
 Open 2-3 terminal windows and run one of the following in each terminal:
 
-`docker exec -i -t server bash`
-`docker exec -i -t client1 bash`
-`docker exec -i -t client2 bash`
+`docker exec -i -t server bash` 
+`docker exec -i -t client1 bash` 
+`docker exec -i -t client2 bash` 
 
 (the names are important - unless you want to change the params in the config file of /test)
 
