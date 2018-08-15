@@ -33,8 +33,10 @@ class Account {
   	}
 
   	get channelId () {
-  		return this._channelId || null;
-  	}
+		return this._channelId || null;
+	}
+	  
+
 }
 
 module.exports = Account

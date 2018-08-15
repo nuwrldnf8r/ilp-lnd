@@ -51,15 +51,12 @@ class Plugin extends PluginMiniAccounts {
 	async _connect (address, { requestId, data }) {
 		debug('server connected');
 		try{
-			//connect to lightning
-			//getinfo
 			if(!this._lightningAddress){
 				debug('getting lightning info');
 				let lightningInfo = await this._lightning.getInfo();
 				debug('got lightning info');
 				this._lightningAddress = `${lightningInfo.identity_pubkey}@${this._externalIP}`;
-			}
-
+			}			
 			return null;
 		}
 		catch(e){
@@ -139,29 +136,6 @@ class Plugin extends PluginMiniAccounts {
 		}
 	}
 
-	/*
-	async _sendMessage (account, data){
-		try{
-			debug('sending message ');
-			
-			let requestId = await util._requestId();
-			debug('requestid: ' + requestId);
-			debug(data);
-			
-			let infoResponse = await this._call(account.ilpAddress, {
-				type: BtpPacket.TYPE_MESSAGE,
-				requestId,
-				data
-			});
-			return null;
-
-		}
-		catch(e){
-			throw e;
-		}
-	}
-	*/
-
 	async _setupChannel (account) {
 		debug('setting up channel');
 		await this._connectToPeer (account);
@@ -231,7 +205,10 @@ class Plugin extends PluginMiniAccounts {
 
 	async _processChannelInfo (account,requestId,data) {
 		debug('server - called process channel info');
-		debug(data);
+		let account = await this._getAccount(address);
+		account.channelId = data.channelId;
+		account.balance = data.balance;
+		await accounts.put(account.name, account);
 		this._setupChannel(account);
 		let packet = protocolDataParser.composeJSONPacket('info',{type: 'channel_info'});
 		return packet;

@@ -135,7 +135,9 @@ class Plugin extends BtpPlugin {
 			await this._call(null, {
 				type: BtpPacket.TYPE_MESSAGE,
 				requestId: requestId,
-				data: this._jsonPacket('info',{type: 'channel_info', channelId: this._channelId})
+				data: this._jsonPacket('info',
+				{type: 'channel_info', channelId: this._channelId, balance: this._channelLocalFunding}
+			)
 			});
 			return null;
 		}
@@ -180,7 +182,9 @@ class Plugin extends BtpPlugin {
 			await this._call(null, {
 				type: BtpPacket.TYPE_MESSAGE,
 				requestId: requestId,
-				data: this._jsonPacket('info',{type: 'channel_info', channelId: this._channelId})
+				data: this._jsonPacket('info',
+					{type: 'channel_info', channelId: this._channelId,balance: this._channelLocalFunding}
+				)
 			});
 			debug(`Channel created. chan_id: ${this._channelId}`);
 			this._settingUpChannel = false;
