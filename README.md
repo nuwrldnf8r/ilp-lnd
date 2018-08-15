@@ -24,7 +24,7 @@ or `DEBUG=client node ./test/test`
 The plugin code is in `./plugins`
 
 * If you run `update.js` in the main dir it watches for any updates and copies the change to all of the docker containers so you can test as you go. 
-* creating channels require 3 confirmations. Running `mine.js` will generate 1 block every 10 secs. Or you can just run it manually - `docker-compose run btcctl generate 3`
+* creating channels require 3 confirmations. Running `environment/mine.js` will generate 1 block every 10 secs. Or you can just run it manually - `docker-compose run btcctl generate 3`
 
 
 
