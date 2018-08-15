@@ -37,9 +37,7 @@ class Plugin extends BtpPlugin {
 		//getInfo
 		//set this._lightningAddress from this.host and identity_pubkey
 		
-		let externalIP = this._externalIP;
-		let pubkey = '_client'; //get from info from getinfo call
-		var packet = await this._lightningInfoHandshake (externalIP, pubkey);
+		var packet = await this._lightningInfoHandshake ();
 		this._handleData(null,{requestId: packet.requestId, data: packet.data});
 		
 		return null;
@@ -48,7 +46,7 @@ class Plugin extends BtpPlugin {
 	async _lightningInfoHandshake (){
 		let requestId = await util._requestId();
 		let lightningInfo = await this._lightning.getInfo();
-		this._lightningAddress = `${lightningInfo.identity_pubkey}@${this.externalIP}`;
+		this._lightningAddress = `${lightningInfo.identity_pubkey}@${this._externalIP}`;
 		this._lightningPubKey = lightningInfo.identity_pubkey;
 		
 		let infoResponse = await this._call(null, {
@@ -278,7 +276,7 @@ class Plugin extends BtpPlugin {
 	async sendMoney (amount) {
 		if(amount<=0) return;
 		let channelBalance = await this._lightning.channelBalance();
-		if(amount>channelBalance.balance) return;
+		if(amount>channelBalance.balance && amount>this._channelLocalFunding) return;
 
 		let paymentRequest = null;
 		try{
@@ -316,6 +314,7 @@ class Plugin extends BtpPlugin {
 					}]
 				}
 			});
+			this._channelLocalFunding -= amount;
 		}
 		catch(e){
 			return;
@@ -336,7 +335,8 @@ class Plugin extends BtpPlugin {
 			throw new Error(`settlement amount does not match invoice amount.
 			  invoice=${invoiceAmount} amount=${amount}`)
 		}
-		this.invoices.delete(condition)
+		this.invoices.delete(condition);
+		this._channelLocalFunding += amount;
 
     	if (this._moneyHandler) {
       		await this._moneyHandler(amount);
