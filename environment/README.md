@@ -1,80 +1,330 @@
-## Lightning Network Daemon
+This document is written for people who are eager to do something with 
+the Lightning Network Daemon (`lnd`). This folder uses `docker-compose` to
+package `lnd` and `btcd` together to make deploying the two daemons as easy as
+typing a few commands. All configuration between `lnd` and `btcd` are handled
+automatically by their `docker-compose` config file.
 
-[![Build Status](https://img.shields.io/travis/lightningnetwork/lnd.svg)](https://travis-ci.org/lightningnetwork/lnd)
-[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/lightningnetwork/lnd/blob/master/LICENSE)
-[![Irc](https://img.shields.io/badge/chat-on%20freenode-brightgreen.svg)](https://webchat.freenode.net/?channels=lnd)
-[![Godoc](https://godoc.org/github.com/lightningnetwork/lnd?status.svg)](https://godoc.org/github.com/lightningnetwork/lnd)
-
-<img src="logo.png">
-
-The Lightning Network Daemon (`lnd`) - is a complete implementation of a
-[Lightning Network](https://lightning.network) node and currently deployed on
-`testnet3` - the Bitcoin Test Network.  `lnd` has several pluggable back-end
-chain services including [`btcd`](https://github.com/btcsuite/btcd) (a
-full-node), [`bitcoind`](https://github.com/bitcoin/bitcoin), and
-[`neutrino`](https://github.com/lightninglabs/neutrino) (a new experimental light client). The project's codebase uses the
-[btcsuite](https://github.com/btcsuite/) set of Bitcoin libraries, and also
-exports a large set of isolated re-usable Lightning Network related libraries
-within it.  In the current state `lnd` is capable of:
-* Creating channels.
-* Closing channels.
-* Completely managing all channel states (including the exceptional ones!).
-* Maintaining a fully authenticated+validated channel graph.
-* Performing path finding within the network, passively forwarding incoming payments.
-* Sending outgoing [onion-encrypted payments](https://github.com/lightningnetwork/lightning-onion)
-through the network.
-* Updating advertised fee schedules.
-* Automatic channel management ([`autopilot`](https://github.com/lightningnetwork/lnd/tree/master/autopilot)).
-
-## Lightning Network Specification Compliance
-`lnd` _fully_ conforms to the [Lightning Network specification
-(BOLTs)](https://github.com/lightningnetwork/lightning-rfc). BOLT stands for:
-Basic of Lightning Technologies. The specifications are currently being drafted
-by several groups of implementers based around the world including the
-developers of `lnd`. The set of specification documents as well as our
-implementation of the specification are still a work-in-progress. With that
-said, the current status of `lnd`'s BOLT compliance is:
-
-  - [X] BOLT 1: Base Protocol
-  - [X] BOLT 2: Peer Protocol for Channel Management
-  - [X] BOLT 3: Bitcoin Transaction and Script Formats
-  - [X] BOLT 4: Onion Routing Protocol
-  - [X] BOLT 5: Recommendations for On-chain Transaction Handling
-  - [X] BOLT 7: P2P Node and Channel Discovery
-  - [X] BOLT 8: Encrypted and Authenticated Transport
-  - [X] BOLT 9: Assigned Feature Flags
-  - [X] BOLT 10: DNS Bootstrap and Assisted Node Location
-  - [X] BOLT 11: Invoice Protocol for Lightning Payments
-
-## Developer Resources
-
-The daemon has been designed to be as developer friendly as possible in order
-to facilitate application development on top of `lnd`. Two primary RPC
-interfaces are exported: an HTTP REST API, and a [gRPC](https://grpc.io/)
-service. The exported API's are not yet stable, so be warned: they may change
-drastically in the near future.
-
-An automatically generated set of documentation for the RPC APIs can be found
-at [api.lightning.community](https://api.lightning.community). A set of developer
-resources including talks, articles, and example applications can be found at:
-[dev.lightning.community](https://dev.lightning.community).
-
-Finally, we also have an active
-[Slack](https://join.slack.com/t/lightningcommunity/shared_invite/enQtMzQ0OTQyNjE5NjU1LWRiMGNmOTZiNzU0MTVmYzc1ZGFkZTUyNzUwOGJjMjYwNWRkNWQzZWE3MTkwZjdjZGE5ZGNiNGVkMzI2MDU4ZTE) where protocol developers, application developers, testers and users gather to
-discuss various aspects of `lnd` and also Lightning in general.
-
-## Installation
-  In order to build from source, please see [the installation
-  instructions](docs/INSTALL.md).
-
-## Docker
-  To run lnd from Docker, please see the main [Docker instructions](docs/DOCKER.md)
+### Prerequisites
+    Name  | Version 
+    --------|---------
+    docker-compose | 1.9.0
+    docker | 1.13.0
   
-## IRC
-  * irc.freenode.net
-  * channel #lnd
-  * [webchat](https://webchat.freenode.net/?channels=lnd)
+### Table of content
+ * [Create lightning network cluster](#create-lightning-network-cluster)
+ * [Connect to faucet lightning node](#connect-to-faucet-lightning-node)
+ * [Questions](#questions)
 
-## Further reading
-* [Step-by-step send payment guide with docker](https://github.com/lightningnetwork/lnd/tree/master/docker)
-* [Contribution guide](https://github.com/lightningnetwork/lnd/blob/master/docs/code_contribution_guidelines.md)
+### Create lightning network cluster
+This section describes a workflow on `simnet`, a development/test network
+that's similar to Bitcoin Core's `regtest` mode. In `simnet` mode blocks can be
+generated at will, as the difficulty is very low. This makes it an ideal
+environment for testing as one doesn't need to wait tens of minutes for blocks
+to arrive in order to test channel related functionality. Additionally, it's
+possible to spin up an arbitrary number of `lnd` instances within containers to
+create a mini development cluster. All state is saved between instances using a
+shared value.
+
+Current workflow is big because we recreate the whole network by ourselves,
+next versions will use the started `btcd` bitcoin node in `testnet` and
+`faucet` wallet from which you will get the bitcoins.
+
+In the workflow below, we describe the steps required to recreate the following
+topology, and send a payment from `Alice` to `Bob`.
+```
++ ----- +                   + --- +
+| Alice | <--- channel ---> | Bob |  <---   Bob and Alice are the lightning network daemons which 
++ ----- +                   + --- +         create channels and interact with each other using the   
+    |                          |            Bitcoin network as source of truth. 
+    |                          |            
+    + - - - -  - + - - - - - - +            
+                 |
+        + --------------- +
+        | Bitcoin network |  <---  In the current scenario for simplicity we create only one  
+        + --------------- +        "btcd" node which represents the Bitcoin network, in a 
+                                    real situation Alice and Bob will likely be 
+                                    connected to different Bitcoin nodes.
+```
+
+**General workflow is the following:** 
+
+ * Create a `btcd` node running on a private `simnet`.
+ * Create `Alice`, one of the `lnd` nodes in our simulation network.
+ * Create `Bob`, the other `lnd` node in our simulation network.
+ * Mine some blocks to send `Alice` some bitcoins.
+ * Open channel between `Alice` and `Bob`.
+ * Send payment from `Alice` to `Bob`.
+ * Close the channel between `Alice` and `Bob`.
+ * Check that on-chain `Bob` balance was changed.
+
+Start `btcd`, and then create an address for `Alice` that we'll directly mine
+bitcoin into.
+```bash
+# Init bitcoin network env variable:
+$ export NETWORK="simnet" 
+
+# Run the "Alice" container and log into it:
+$ docker-compose run -d --name alice lnd_btc
+$ docker exec -i -t alice bash
+
+# Generate a new backward compatible nested p2sh address for Alice:
+alice$ lncli newaddress np2wkh 
+
+# Recreate "btcd" node and set Alice's address as mining address:
+$ MINING_ADDRESS=<alice_address> docker-compose up -d btcd
+
+# Generate 400 blocks (we need at least "100 >=" blocks because of coinbase 
+# block maturity and "300 ~=" in order to activate segwit):
+$ docker-compose run btcctl generate 400
+
+# Check that segwit is active:
+$ docker-compose run btcctl getblockchaininfo | grep -A 1 segwit
+```
+
+Check `Alice` balance:
+```
+alice$ lncli walletbalance
+```
+
+Connect `Bob` node to `Alice` node.
+
+```bash
+# Run "Bob" node and log into it:
+$ docker-compose run -d --name bob lnd_btc
+$ docker exec -i -t bob bash
+
+# Get the identity pubkey of "Bob" node:
+bob$ lncli getinfo
+
+{
+    ----->"identity_pubkey": "0343bc80b914aebf8e50eb0b8e445fc79b9e6e8e5e018fa8c5f85c7d429c117b38",
+    "alias": "",
+    "num_pending_channels": 0,
+    "num_active_channels": 0,
+    "num_peers": 0,
+    "block_height": 1215,
+    "block_hash": "7d0bc86ea4151ed3b5be908ea883d2ac3073263537bcf8ca2dca4bec22e79d50",
+    "synced_to_chain": true,
+    "testnet": false
+    "chains": [
+        "bitcoin"
+    ]
+}
+
+# Get the IP address of "Bob" node:
+$ docker inspect bob | grep IPAddress
+
+# Connect "Alice" to the "Bob" node:
+alice$ lncli connect <bob_pubkey>@<bob_host>
+
+# Check list of peers on "Alice" side:
+alice$ lncli listpeers
+{
+    "peers": [
+        {
+            "pub_key": "0343bc80b914aebf8e50eb0b8e445fc79b9e6e8e5e018fa8c5f85c7d429c117b38",
+            "address": "172.19.0.4:9735",
+            "bytes_sent": "357",
+            "bytes_recv": "357",
+            "sat_sent": "0",
+            "sat_recv": "0",
+            "inbound": true,
+            "ping_time": "0"
+        }
+    ]
+}
+
+# Check list of peers on "Bob" side:
+bob$ lncli listpeers
+{
+    "peers": [
+        {
+            "pub_key": "03d0cd35b761f789983f3cfe82c68170cd1c3266b39220c24f7dd72ef4be0883eb",
+            "address": "172.19.0.3:51932",
+            "bytes_sent": "357",
+            "bytes_recv": "357",
+            "sat_sent": "0",
+            "sat_recv": "0",
+            "inbound": false,
+            "ping_time": "0"
+        }
+    ]
+}
+```
+
+Create the `Alice<->Bob` channel.
+```bash
+# Open the channel with "Bob":
+alice$ lncli openchannel --node_key=<bob_identity_pubkey> --local_amt=1000000
+
+# Include funding transaction in block thereby opening the channel:
+$ docker-compose run btcctl generate 3
+
+# Check that channel with "Bob" was opened:
+alice$ lncli listchannels
+{
+    "channels": [
+        {
+            "active": true,
+            "remote_pubkey": "0343bc80b914aebf8e50eb0b8e445fc79b9e6e8e5e018fa8c5f85c7d429c117b38",
+            "channel_point": "3511ae8a52c97d957eaf65f828504e68d0991f0276adff94c6ba91c7f6cd4275:0",
+            "chan_id": "1337006139441152",
+            "capacity": "1005000",
+            "local_balance": "1000000",
+            "remote_balance": "0",
+            "commit_fee": "8688",
+            "commit_weight": "600",
+            "fee_per_kw": "12000",
+            "unsettled_balance": "0",
+            "total_satoshis_sent": "0",
+            "total_satoshis_received": "0",
+            "num_updates": "0",
+             "pending_htlcs": [
+            ],
+            "csv_delay": 4
+        }
+    ]
+}
+```
+
+Send the payment from `Alice` to `Bob`.
+```bash
+# Add invoice on "Bob" side:
+bob$ lncli addinvoice --amt=10000
+{
+        "r_hash": "<your_random_rhash_here>", 
+        "pay_req": "<encoded_invoice>", 
+}
+
+# Send payment from "Alice" to "Bob":
+alice$ lncli sendpayment --pay_req=<encoded_invoice>
+
+# Check "Alice"'s channel balance
+alice$ lncli channelbalance
+
+# Check "Bob"'s channel balance
+bob$ lncli channelbalance
+```
+
+Now we have open channel in which we sent only one payment, let's imagine
+that we sent lots of them and we'd now like to close the channel. Let's do
+it!
+```bash
+# List the "Alice" channel and retrieve "channel_point" which represents
+# the opened channel:
+alice$ lncli listchannels
+{
+    "channels": [
+        {
+            "active": true,
+            "remote_pubkey": "0343bc80b914aebf8e50eb0b8e445fc79b9e6e8e5e018fa8c5f85c7d429c117b38",
+       ---->"channel_point": "3511ae8a52c97d957eaf65f828504e68d0991f0276adff94c6ba91c7f6cd4275:0",
+            "chan_id": "1337006139441152",
+            "capacity": "1005000",
+            "local_balance": "990000",
+            "remote_balance": "10000",
+            "commit_fee": "8688",
+            "commit_weight": "724",
+            "fee_per_kw": "12000",
+            "unsettled_balance": "0",
+            "total_satoshis_sent": "10000",
+            "total_satoshis_received": "0",
+            "num_updates": "2",
+            "pending_htlcs": [
+            ],
+            "csv_delay": 4
+        }
+    ]
+}
+
+# Channel point consists of two numbers separated by a colon. The first one 
+# is "funding_txid" and the second one is "output_index":
+alice$ lncli closechannel --funding_txid=<funding_txid> --output_index=<output_index>
+
+# Include close transaction in a block thereby closing the channel:
+$ docker-compose run btcctl generate 3
+
+# Check "Alice" on-chain balance was credited by her settled amount in the channel:
+alice$ lncli walletbalance
+
+# Check "Bob" on-chain balance was credited with the funds he received in the
+# channel:
+bob$ lncli walletbalance
+{
+    "total_balance": "10000",
+    "confirmed_balance": "10000",
+    "unconfirmed_balance": "0"
+}
+```
+
+### Connect to faucet lightning node
+In order to be more confident with `lnd` commands I suggest you to try 
+to create a mini lightning network cluster ([Create lightning network cluster](#create-lightning-network-cluster)).
+
+In this section we will try to connect our node to the faucet/hub node 
+which we will create a channel with and send some amount of 
+bitcoins. The schema will be following:
+
+```
++ ----- +                   + ------ +         (1)        + --- +
+| Alice | <--- channel ---> | Faucet |  <--- channel ---> | Bob |    
++ ----- +                   + ------ +                    + --- +        
+    |                            |                           |           
+    |                            |                           |      <---  (2)         
+    + - - - -  - - - - - - - - - + - - - - - - - - - - - - - +            
+                                 |
+                       + --------------- +
+                       | Bitcoin network |  <---  (3)   
+                       + --------------- +        
+        
+        
+ (1) You may connect an additional node "Bob" and make the multihop
+ payment Alice->Faucet->Bob
+  
+ (2) "Faucet", "Alice" and "Bob" are the lightning network daemons which 
+ create channels to interact with each other using the Bitcoin network 
+ as source of truth.
+ 
+ (3) In current scenario "Alice" and "Faucet" lightning network nodes 
+ connect to different Bitcoin nodes. If you decide to connect "Bob"
+ to "Faucet" then the already created "btcd" node would be sufficient.
+```
+
+First of all you need to run `btcd` node in `testnet` and wait for it to be 
+synced with test network (`May the Force and Patience be with you`).
+```bash 
+# Init bitcoin network env variable:
+$ export NETWORK="testnet"
+
+# Run "btcd" node:
+$ docker-compose up -d "btcd"
+```
+
+After `btcd` synced, connect `Alice` to the `Faucet` node.
+
+The `Faucet` node address can be found at the [Faucet Lightning Community webpage](https://faucet.lightning.community).
+
+```bash 
+# Run "Alice" container and log into it:
+$ docker-compose up -d "alice"; docker exec -i -t "alice" bash
+
+# Connect "Alice" to the "Faucet" node:
+alice$ lncli connect <faucet_identity_address>@<faucet_host>
+```
+
+After a connection is achieved, the `Faucet` node should create the channel
+and send some amount of bitcoins to `Alice`.
+
+**What you may do next?:**
+- Send some amount to `Faucet` node back.
+- Connect `Bob` node to the `Faucet` and make multihop payment (`Alice->Faucet->Bob`)
+- Close channel with `Faucet` and check the onchain balance.
+
+### Questions
+[![Irc](https://img.shields.io/badge/chat-on%20freenode-brightgreen.svg)]
+(https://webchat.freenode.net/?channels=lnd)
+
+* How to see `alice` | `bob` | `btcd` logs?
+```bash
+docker-compose logs <alice|bob|btcd>
+```
