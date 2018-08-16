@@ -1,11 +1,10 @@
 Interledger plugin for lightning. Work in progress..
 
 ### To set up:
-
+(inspired by https://github.com/lightningnetwork/lnd/tree/master/docker)
 * Clone this repo
 * `./environment` has all the dependancies to set up lnd etc. using docker. 
 * To get going navigate to `./environment` and run `node setup.js`
-* This should setup everything you need assuming you have docker installed and running on a mac.
 
 ### Running the plugins in the containers
 Open 2-3 terminal windows and run one of the following in each terminal:
