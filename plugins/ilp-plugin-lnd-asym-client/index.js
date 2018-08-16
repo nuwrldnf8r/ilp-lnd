@@ -7,6 +7,7 @@ const LndLib = require('./src/lndlib');
 const debug = require('debug')('client');
 
 const GET_INVOICE = 'get_invoice';
+const CHANNEL_INFO = 'channel_info';
 const PAYMENT_PREIMAGE = 'payment_preimage';
 
 class Plugin extends BtpPlugin {
@@ -16,12 +17,12 @@ class Plugin extends BtpPlugin {
 		if(!opts.externalIP){
 			throw new InvalidFieldsError('missing opts.externalIP');
 		}	
-		this._externalIP = opts._externalIP;
+		this._externalIP = opts.externalIP;
 		this._setupLnChannel = opts.setupLnChannel || true;
 		this._channelLocalFunding = opts.channelLocalFunding || 100000;
 		this._protocolCallFunctions = {};
 		this._protocolCallFunctions['lightning_info'] = this._processLightningInfo.bind(this);
-		this._protocolCallFunctions['channel_info'] = this._processChannelInfo.bind(this);
+		this._protocolCallFunctions[CHANNEL_INFO] = this._processChannelInfo.bind(this);
 		this._protocolCallFunctions[GET_INVOICE] = this._getInvoice.bind(this);
 
 		debug('setting up lightning');
@@ -30,13 +31,10 @@ class Plugin extends BtpPlugin {
 	}
 
 	async _connect () {
-		await this._lightning.initialize();
-		debug('client connected');
+		debug('initializing lnd')
+		await this._lightning.initialize()
+		debug('client plugin connected to lnd')
 
-		//connect to lightning
-		//getInfo
-		//set this._lightningAddress from this.host and identity_pubkey
-		
 		let externalIP = this._externalIP;
 		let pubkey = '_client'; //get from info from getinfo call
 		var packet = await this._lightningInfoHandshake (externalIP, pubkey);
@@ -48,7 +46,9 @@ class Plugin extends BtpPlugin {
 	async _lightningInfoHandshake (){
 		let requestId = await util._requestId();
 		let lightningInfo = await this._lightning.getInfo();
-		this._lightningAddress = `${lightningInfo.identity_pubkey}@${this.externalIP}`;
+		this._lightningAddress = `${lightningInfo.identity_pubkey}@${this._externalIP}`;
+		debug('ye')
+		debug(this._lightningAddress)
 		this._lightningPubKey = lightningInfo.identity_pubkey;
 		
 		let infoResponse = await this._call(null, {
@@ -67,8 +67,8 @@ class Plugin extends BtpPlugin {
 		});
 
 		return {requestId: requestId, data: infoResponse};
-	}
-	
+	} 
+
 	/**********************Channels**********************/
 
 	async _getChannelId (pub_key) {
@@ -137,7 +137,7 @@ class Plugin extends BtpPlugin {
 			await this._call(null, {
 				type: BtpPacket.TYPE_MESSAGE,
 				requestId: requestId,
-				data: this._jsonPacket('info',{type: 'channel_info', channelId: this._channelId})
+				data: this._jsonPacket('info',{type: CHANNEL_INFO, channelId: this._channelId})
 			});
 			return null;
 		}
@@ -182,7 +182,7 @@ class Plugin extends BtpPlugin {
 			await this._call(null, {
 				type: BtpPacket.TYPE_MESSAGE,
 				requestId: requestId,
-				data: this._jsonPacket('info',{type: 'channel_info', channelId: this._channelId})
+				data: this._jsonPacket('info',{type: CHANNEL_INFO, channelId: this._channelId})
 			});
 			debug(`Channel created. chan_id: ${this._channelId}`);
 			this._settingUpChannel = false;
@@ -252,8 +252,10 @@ class Plugin extends BtpPlugin {
 	/******************************************************************/
 
 	async _handleData (from, { requestId, data}) {
+		debug('handleData')
 		const { ilp, protocolMap } = this.protocolDataToIlpAndCustom(data);
-		
+		debug(ilp)
+		debug(protocolMap)
 		if(protocolMap.info && protocolMap.info.type && this._protocolCallFunctions[protocolMap.info.type]){
 			return await this._protocolCallFunctions[protocolMap.info.type](requestId,protocolMap.info);
 		}

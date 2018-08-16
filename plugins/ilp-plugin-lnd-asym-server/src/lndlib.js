@@ -13,11 +13,10 @@ process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA';
 
 class Lightning{
 
-	constructor(certPath,lndPath,protoPath,macaroonPath){
+	constructor(certPath, lndPath, macaroonPath){
 		this.certPath = certPath || null;
 		this.macaroonPath = macaroonPath || null;
 		this.lndPath = lndPath ||  'localhost:10009';
-		this.protoPath = protoPath || path.join(__dirname,'rpc.proto');
 
 		this.addressType = {
 	    	p2wkh: 'p2wkh',
@@ -44,8 +43,7 @@ class Lightning{
 							if(err) throw err
 							resolve(`${process.env.HOME}/Library/Application Support/Lnd/tls.cert`);
 						})
-					}
-				});
+					} });
 			}
 		});
 	}
@@ -59,55 +57,38 @@ class Lightning{
 		});
 	}
 
-	_loadLndDescriptor () {
-		return new Promise((resolve,reject)=>{
-			let opts = {keepCase: true, longs: String, enums: String, defaults: true, oneofs: true};
-			protoLoader.load(this.protoPath,opts).then((packageDefinition)=>{
-				let lnrpcDescriptor = grpc.loadPackageDefinition(packageDefinition);
-				let lnrpc = lnrpcDescriptor.lnrpc;
-				resolve(lnrpc);
-			}).catch((err)=>{
-				throw err;
-			});
-			
-		});
+	async _loadLndDescriptor () {
+		//let opts = {keepCase: true, longs: String, enums: String, defaults: true, oneofs: true};
+		try {
+			let packageDefinition = await protoLoader.load(path.join(__dirname,'rpc.proto'))
+			let lnrpcDescriptor = grpc.loadPackageDefinition(packageDefinition)
+	  	let lnrpc = lnrpcDescriptor.lnrpc
+			return lnrpc	
+		} catch (e) {
+			throw new Error('failed to load lnd descriptor from rpc.proto')
+		}
 	}
-
+  
+	/* Dependent on OS */
 	_getMacaroonPath () {
-		return new Promise((resolve,reject) => {
-			if(this.macaroonPath){
-				resolve(this.macaroonPath);
-			}
-			else{
-				//check linux
-				this.macaroonPath = `${process.env.HOME}/.lnd/admin.macaroon`;
-				fs.stat(this.macaroonPath,(err,ret)=>{
-					if(ret){
-						resolve(this.macaroonPath);
-					}
-					else{
-						this.macaroonPath = `${process.env.HOME}/Library/Application Support/Lnd/admin.macaroon`;
-						fs.stat(this.macaroonPath,(err,ret)=>{
-							if(err) throw err
-							resolve(this.macaroonPath);
-						})
-					}
-				});
-			}
-		});
+		// mac
+		if (process.platform === 'darwin') {
+			return `${process.env.HOME}/Library/Application Support/Lnd/admin.macaroon`
+		// linux or windows -- for sure works with linux, need to check for windows
+		} else {
+			return `${process.env.HOME}/.lnd/admin.macaroon`
+		}
 	}
 
-	_getMacaroonMeta (macaroonPath) {
-		macaroonPath = macaroonPath || this.macaroonPath;
-		return new Promise((resolve,reject)=>{
-			fs.readFile(macaroonPath,(err,ret)=>{
-				if(err) throw err;
-				let macaroon = ret.toString('hex');
-				let meta = new grpc.Metadata()
-				meta.add('macaroon', macaroon);
-				resolve(meta);
-			});		
-		});
+  _getMacaroonMeta (macaroonPath) {
+		try {
+			const macaroon = fs.readFileSync(macaroonPath)
+			const metadata = new grpc.Metadata()
+			metadata.add('macaroon', macaroon.toString('hex'))
+			return metadata
+		} catch (e) {
+			throw new Error('macaroon file does not exist')
+		}
 	}
 
 	_getMacaroonCreds (meta) {
@@ -124,42 +105,26 @@ class Lightning{
 			let certPath = await this._getCertPath();
 			let lndCert = await this._getCertificate(certPath);
 			let lnrpc = await this._loadLndDescriptor();
-			
-			let macaroonPath = await this._getMacaroonPath();
+			let macaroonPath = this.macaroonPath || this._getMacaroonPath();
 			let macaroonMeta = await this._getMacaroonMeta(macaroonPath);
 			let macaroonCreds = await this._getMacaroonCreds(macaroonMeta);
 
-			
 			let sslCreds = grpc.credentials.createSsl(lndCert);
 			let credentials = grpc.credentials.combineChannelCredentials(sslCreds, macaroonCreds);
 
 			this.lightning = new lnrpc.Lightning(this.lndPath, credentials);
 			this.initialized = true;
-			return true;
 		}
 		catch(e){
 			throw e;
 		}	
 	}
 
-	checkInitialized() {
-		return new Promise((resolve,reject)=>{
-			if(this.initilized){
-				this.initialize().then((initialzed)=>{
-					resolve(true);
-				}).catch((e) => {
-					throw e;
-				})
-			}
-			else{
-				resolve(true);
-			}		
-		});
-	}
-
 	async callSimple(func, options){
 		try{
-			await this.checkInitialized();
+			if (this.initialized != true){
+				await this.initialize()
+			}
 			let result = await new Promise((resolve, reject) => {
 				this.lightning[func](options, (err, ret)=> {
 					if(err) return reject(err);
@@ -228,6 +193,10 @@ class Lightning{
 		}
     }
 
+	/* This is very convoluted and needs to be refactored.
+	 * No reason for this._lightningAddress to be a join
+	 * of pubkey and externalIP with an @ in the middle,
+	 * should just be an object if these must be paired together */
 	async connect ({addr=null, pubkey=null, host=null, perm=false}) {
     	if(addr){
     		let ar = addr.split('@');

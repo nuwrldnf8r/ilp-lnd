@@ -39,25 +39,26 @@ class Plugin extends PluginMiniAccounts {
 		this._protocolCallFunctions['channel_info'] = this._processChannelInfo.bind(this);
 		this._protocolCallFunctions['get_lightning_info'] = this._getLightningInfo.bind(this);
 		this._protocolCallFunctions[GET_INVOICE] = this._getInvoice.bind(this);
+		this._lightning = new LndLib.lightning(opts._lndCertPath,opts._lndHost,opts._lndMacaroonPath);
 			
-		debug('setting up lightning');
-		this._lightning = new LndLib.lightning(opts._lndCertPath,opts._lndHost,opts._lndProtoPath,opts._lndMacaroonPath);
-		this._lightning.initialize().then(()=>{
-			debug('lightning initialized');
-		});
 		this._invoices = new Map();
+	}
+
+	async	_preConnect() {
+		debug('initializing lnd')
+		await this._lightning.initialize()
+		debug('server plugin connected to lnd')
 	}
 
 	async _connect (address, { requestId, data }) {
 		debug('server connected');
 		try{
-			//connect to lightning
-			//getinfo
 			if(!this._lightningAddress){
-				debug('getting lightning info');
 				let lightningInfo = await this._lightning.getInfo();
-				debug('got lightning info');
-				this._lightningAddress = `${lightningInfo.identity_pubkey}@${this._externalIP}`;
+				debug('lightningInfo')
+				debug(lightningInfo)
+				this._lightningAddress = `${lightningInfo.identityPubkey}@${this._externalIP}`;
+		debug(`connect finished, and lightningAddress:${this._lightningAddress}`)
 			}
 
 			return null;
@@ -239,6 +240,8 @@ class Plugin extends PluginMiniAccounts {
 	}
 
 	async _getLightningInfo (account,requestId,data) {
+		debug('lightning info')
+		debug(data)
 		debug('server - called send lightning info');
 		try{
 			if(data.address){
@@ -283,7 +286,6 @@ class Plugin extends PluginMiniAccounts {
 		let { ilp, protocolMap } = this.protocolDataToIlpAndCustom(data);
 		
 		debug(protocolMap);
-		
 
 		if (protocolMap.ilp && ilp[0] === IlpPacket.Type.TYPE_ILP_PREPARE) {
 			/*
@@ -296,9 +298,7 @@ class Plugin extends PluginMiniAccounts {
 			  	if (amount !== '0' && this._moneyHandler) this._moneyHandler(amount)
 			}
 			*/
-		}
-		else if(protocolMap.info && protocolMap.info.type && this._protocolCallFunctions[protocolMap.info.type]){
-			debug('here');
+		} else if(protocolMap.info && protocolMap.info.type && this._protocolCallFunctions[protocolMap.info.type]){
 			var ret = await this._protocolCallFunctions[protocolMap.info.type](account,requestId,protocolMap.info);
 			return [ret];
 		}
