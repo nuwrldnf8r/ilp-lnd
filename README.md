@@ -1,3 +1,5 @@
+Interledger plugin for lightning. Work in progress..
+
 ### To set up:
 
 * Clone this repo
