@@ -3,7 +3,8 @@ const BtpPacket = require('btp-packet');
 const crypto = require('crypto');
 const {  util, ChannelWatcher } = require('ilp-plugin-xrp-paychan-shared');
 const { InvalidFieldsError, NotAcceptedError } = require('./src/errors');
-const LndLib = require('./src/lndlib');
+// def needs to become it's own directory
+const LndLib = require('../../plugins/ilp-plugin-lnd-asym-server/src/lndlib');
 const debug = require('debug')('client');
 
 const GET_INVOICE = 'get_invoice';
@@ -254,7 +255,6 @@ class Plugin extends BtpPlugin {
 	async _handleData (from, { requestId, data}) {
 		debug('handleData')
 		const { ilp, protocolMap } = this.protocolDataToIlpAndCustom(data);
-		debug(ilp)
 		debug(protocolMap)
 		if(protocolMap.info && protocolMap.info.type && this._protocolCallFunctions[protocolMap.info.type]){
 			return await this._protocolCallFunctions[protocolMap.info.type](requestId,protocolMap.info);
