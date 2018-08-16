@@ -35,8 +35,8 @@ services:
     lndnode:
         image: lndnode
         build:
-          context: ./
-          dockerfile: lnd_node/Dockerfile
+          context: ../
+          dockerfile: environment/lnd_node/Dockerfile
         environment:
           - RPCUSER
           - RPCPASS

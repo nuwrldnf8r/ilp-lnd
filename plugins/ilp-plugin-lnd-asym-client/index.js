@@ -91,6 +91,7 @@ class Plugin extends BtpPlugin {
 	}
 
 	async _getExistingChannel () {
+		//TODO - make sure this is a channel with the server
 		debug('checking for existing channels');
 		if(this._channelId){
 			try{
@@ -108,7 +109,7 @@ class Plugin extends BtpPlugin {
 				
 				let channel = await this._getChannel(this._serverLightningPubKey);
 				
-				if(channel && channel.local_balance>0){
+				if(channel && channel.local_balance>0){ //TODO >= than channelLocalFunding
 					return channel;
 				}
 				else{
@@ -124,7 +125,7 @@ class Plugin extends BtpPlugin {
 	async _setupChannel () {
 		
 		if(!this._setupLnChannel) return null;
-		if(this._settingUpChannel) return null;
+		if(this._settingUpChannel) return null; //TODO - see if this works
 		this._settingUpChannel = true;
 		debug(`setting up channel with ${this._serverLightningAddress} - client`);
 		let existingChannel = await this._getExistingChannel();
@@ -221,6 +222,7 @@ class Plugin extends BtpPlugin {
 		//if not connected to any peers - connect to this peer
 		let ret = await this._lightning.listPeers();
 		debug(ret.peers);
+		//TODO - need to peer with server anyway
 		if(ret.peers.length===0){
 			debug('no peers exist - connecting to peer');
 			await this._lightning.connect({addr: this._serverLightningAddress});

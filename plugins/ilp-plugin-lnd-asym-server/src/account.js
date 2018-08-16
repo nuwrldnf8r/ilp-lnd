@@ -35,6 +35,14 @@ class Account {
   	get channelId () {
 		return this._channelId || null;
 	}
+
+	set balance (channelId){
+		this._channelId = channelId;
+	}
+
+	get balance () {
+	  return this._channelId || null;
+  }
 	  
 
 }

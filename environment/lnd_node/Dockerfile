@@ -1,9 +1,6 @@
 FROM golang:1.10-alpine as builder
 
-MAINTAINER Olaoluwa Osuntokun <lightning.engineering>
-
-# Copy in the local repository to build from.
-# COPY . /go/src/github.com/lightningnetwork/lnd
+MAINTAINER Gavin Marshall
 
 # Force Go to use the cgo based DNS resolver. This is required to ensure DNS
 # queries required to connect to linked containers succeed.
@@ -22,7 +19,16 @@ RUN  cd /go/src/github.com/lightningnetwork/lnd \
 # Start a new, final image to reduce size.
 FROM node:alpine as final
 
-COPY "plugins_built" ./ilp_plugins/
+RUN apk add --no-cache \
+    bash \
+    python \
+    make \
+    g++
+
+#COPY "plugins_built" ./ilp_plugins/
+COPY ./plugins ./ilp_plugins
+RUN cd ./ilp_plugins/ilp-plugin-lnd-asym-client && npm install
+RUN cd ./ilp_plugins/ilp-plugin-lnd-asym-server && npm install
 
 # Expose lnd ports (server, rpc).
 EXPOSE 9735 10009 5000 5001 7768
@@ -32,11 +38,7 @@ COPY --from=builder /go/bin/lncli /bin/
 COPY --from=builder /go/bin/lnd /bin/
 
 # Add bash and python.
-RUN apk add --no-cache \
-    bash \
-    python \
-    make \
-    g++
+
 # Copy the entrypoint script.
-COPY "lnd_node/start.sh" .
+COPY "environment/lnd_node/start.sh" .
 RUN chmod +x start.sh
